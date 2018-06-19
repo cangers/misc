@@ -2,50 +2,97 @@ import yaml
 import argparse
 import os
 import sys
+import warnings
 
 class ParseYaml(object):
-	"""
-	Script to read yaml file and create bash variable assignments as such:
-	node1_node2_..._noden=leaf
-	Which are written to stdout
-	"""
+    """
+    Script to read yaml file and create bash variable assignments as such:
+    key1_key2..._keyn=value
+    Which are written to stdout
+    """
+    #, sep, cap, set
+    def __init__(self, file, sep='_', cap=False, prefix=None):
+        self.file = file
+        self.sep = sep
+        self.cap = cap
+        self.prefix = prefix
+        self.data = self.parse_yaml(self.file)
+        self.res = []
 
-	def __init__(self, file, sep, cap, set):
-		self.file = file
-		self.sep = sep
-		self.cap = cap
-		self.set = set
-		self.data = self.parse_yaml(self.file)
-		self.res = self.top_level()
+    def _walk_dict(self, indict, pre=None):
+        """
+        Main function to traverse the dictionary recursively.
+        :param indict: the serialized yaml file
+        :param pre: prefix to keep track of recursion depth
+        :return: updates self.res in place.
+        """
+        for key, value in indict.items():
+            if isinstance(value, dict):
+                pre = pre + self.sep + key if pre is not None else key
+                self._walk_dict(value, pre=pre)
+            else:
+                bash_var = pre + self.sep + key if pre is not None else key
+                bash_var = self.prefix + self.sep + bash_var if self.prefix is not None else bash_var
+                bash_var = bash_var.upper() if self.cap else bash_var
+                bash_assignment = "{}={}".format(bash_var, value)
+                self.res.append(bash_assignment)
 
-	def walk_dict(self, indict, pre=None):
-		for key, value in indict.items():
-			print key, value
-			if isinstance(value, dict):
-				pre = "{}_{}".format(pre, key) if pre is not None else key
-				self.walk_dict(value, pre=pre)
-			else:
-				bash_var = "{}_{}".format(pre, key) if pre is not None else key
-				bash_assignment = "{}={}".format(bash_var, value)
-				return(bash_assignment)
+    def _set_res(self):
+        """
+        Entry point to traversing the dictionary.
+        :return: updates self.res in place
+        """
+        self.res = []
+        for key, value in self.data.items():
+            if key is None:
+                continue
+            self._walk_dict({key: value})
 
-	def top_level(self):
-		res = []
-		for key, value in self.data.items():
-			if key is None:
-				continue
-			res += self.walk_dict({key: value})
-		return res
+    def parse_yaml(self, yaml_file):
+        data = yaml.load(yaml_file)
+        yaml_file.close()
+        return (data)
 
-	def parse_yaml(self, file):
-		if not os.path.isfile(file):
-			raise IOError('File {} not found'.format(file))
-		with open(file, 'r') as yml:
-			data = yaml.load(yml)
-		return(data)
+    def to_stdout(self):
+        self._set_res()
+        msg = '\n'.join(self.res)
+        print(msg)
 
-	def get(self, key, default):
-		return self.data.get(key, default)
+    # get() will never be used at same time as to_stdout() when called from command line
+    def get(self, key, default):
+        self._set_res()
+        val = [x.split('=')[1] for x in self.res if x.split('=')[0] == key]
+        if len(val) > 1:
+            raise ValueError('More than one value matched that key.')
+        elif len(val) == 1:
+            return val[0]
+        elif len(val) == 0 and default is None:
+            raise KeyError('Key not found and default not specified.')
+        else:
+            return default
+
+def _init_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", help="YAML file", type=argparse.FileType('r'))
+    parser.add_argument("--sep", help="Key-value separator", type=str, choices=['','_'], default='_')
+    parser.add_argument("--cap", help="Capitalize variable(s)", type=bool, default=False)
+    parser.add_argument("--prefix", help="Prefix for variable(s)", type=str, default=None)
+    parser.add_argument("--get", help="Retrieve a value", type=str, default=None)
+    parser.add_argument("--default", help="Default value if key is not found (for --get)", default=None)
+    return parser
+
+def Main():
+    parser = _init_args()
+    args = parser.parse_args()
+    if args.default is not None and args.get is None:
+        warnings.warn("Argument --default ignored in absence of --get.")
+    yml = ParseYaml(file=args.file, sep=args.sep, cap=args.cap, prefix=args.prefix)
+
+    if args.get is not None:
+        val = yml.get(args.get, args.default)
+        print val
+    else:
+        yml.to_stdout()
 
 if __name__ == '__main__':
-	ParseYaml('')
+    Main()
