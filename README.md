@@ -6,7 +6,7 @@ Miscellaneous utilities and helper scripts.
 A tool to allow bash scripts to read yaml files. It pipes the output to stdout to allow shell scripts to evaluate it.
 
 Given a yaml file db.yaml:
-```
+```yaml
 author: corey
 version: 1.0
 db:
@@ -46,7 +46,7 @@ positional arguments:
 
 optional arguments:
   -h, --help         show this help message and exit
-  --sep {,_}         Key-value separator
+  --sep              Key-value separator
   --cap CAP          Capitalize variable(s)
   --prefix PREFIX    Prefix for variable(s)
   --get GET          Retrieve a value
@@ -54,4 +54,48 @@ optional arguments:
   ```
 
 ##### Examples
+The default behavior of parse_yaml.py is to print the bash-ified yaml file to stdout. In order to assign
+those variables in your bash scripts, use `eval`
+```bash
+$ eval $(python parse_yaml.py db.yaml)
+$ echo $db_type
+mysql
+```
+If there are two yaml files with the same variables, use a prefix to keep variable assignments unique.
 
+staging.yaml:
+```yaml
+db:
+    type: sqllite
+    host: 127.0.0.1
+    user: dev
+    password: password123
+```
+prod.yaml:
+```yaml
+db:
+    type: postgres
+    host: 10.0.50.100
+    user: postgres
+    password: password123
+```
+
+```bash
+$ eval $(python parse_yaml.py prod.yaml --prefix prod --cap)
+$ eval $(python parse_yaml.py staging.yaml --prefix stg --cap)
+$ echo $PROD_DB_HOST
+10.0.50.100
+$ echo $STG_DB_HOST
+127.0.0.1
+```
+
+It's also easy to grab a single value from a file. Access it with the variable that would get assigned
+if you'd printed to stdout.
+```bash
+$ prod_user=$(python parse_yaml.py prod.yaml --get db_user)
+$ prod_port=$(python parse_yaml.py prod.yaml --get db_port --default 5432)
+$ echo prod_user
+postgres
+$ echo prod_port
+5432
+```

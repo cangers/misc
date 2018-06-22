@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 import warnings
+import string
 
 class ParseYaml(object):
     """
@@ -71,11 +72,18 @@ class ParseYaml(object):
         else:
             return default
 
+# Make sure you don't use any characters that would screw with linux
+def _valid_char(x):
+    alphanum = ''.join([str(i) for i in range(0,10)]) + string.letters + '_'
+    if x not in alphanum:
+        raise ValueError("Invalid separator character.")
+    return x
+
 def _init_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("file", help="YAML file", type=argparse.FileType('r'))
-    parser.add_argument("--sep", help="Key-value separator", type=str, choices=['','_'], default='_')
-    parser.add_argument("--cap", help="Capitalize variable(s)", type=bool, default=False)
+    parser.add_argument("--sep", help="Key-value separator", type=_valid_char, default='_')
+    parser.add_argument("--cap", help="Capitalize variable(s)", type=bool, default=False, nargs='?', const=True)
     parser.add_argument("--prefix", help="Prefix for variable(s)", type=str, default=None)
     parser.add_argument("--get", help="Retrieve a value", type=str, default=None)
     parser.add_argument("--default", help="Default value if key is not found (for --get)", default=None)
